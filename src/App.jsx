@@ -359,7 +359,15 @@ function Shell({ user, onLogout, mobileNav, setMobileNav }) {
           <Routes>
             <Route path="/" element={<Dashboard user={user} />} />
             <Route path="/products" element={<Products user={user} />} />
+            <Route
+              path="/products/new"
+              element={isAdmin ? <ProductForm /> : <Navigate to="/products" replace />}
+            />
             <Route path="/categories" element={<Categories user={user} />} />
+            <Route
+              path="/categories/new"
+              element={isAdmin ? <CategoryForm /> : <Navigate to="/categories" replace />}
+            />
             <Route path="/cart" element={<Cart />} />
             <Route path="/users" element={isAdmin ? <UsersPage /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -543,6 +551,7 @@ function Products({ user }) {
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState(null);
   const isAdmin = user?.role === "admin";
+  const navigate = useNavigate();
   const load = () =>
     api
       .get("/api/products")
@@ -612,7 +621,7 @@ function Products({ user }) {
         description="Jelajahi dan kelola katalog produk."
         action={
           isAdmin && (
-            <button className="button primary" onClick={createProduct}>
+            <button className="button primary" onClick={() => navigate("/products/new")}>
               + Add product
             </button>
           )
@@ -679,11 +688,158 @@ function Products({ user }) {
   );
 }
 
+function ProductForm() {
+  const navigate = useNavigate();
+
+  const [categories, setCategories] = useState([]);
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    price: "",
+    stock: "",
+    category_id: "",
+  });
+
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api
+      .get("/api/categories")
+      .then((response) => {
+        setCategories(asArray(getPayload(response)));
+      })
+      .catch((e) => setError(getErrorMessage(e)));
+  }, []);
+
+  function update(key, value) {
+    setForm((old) => ({ ...old, [key]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+
+    if (!form.category_id) {
+      setError("Silakan pilih kategori produk.");
+      return;
+    }
+
+    setBusy(true);
+
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      price: Number(form.price),
+      stock: Number(form.stock),
+      categoryId: Number(form.category_id),
+    };
+
+    try {
+      console.log("CREATE PRODUCT PAYLOAD:", payload);
+
+      await api.post("/api/products", payload);
+
+      navigate("/products");
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="PRODUCT MANAGEMENT"
+        title="Add New Product"
+        description="Tambahkan produk baru ke dalam katalog."
+      />
+
+      <section className="panel" style={{ maxWidth: "760px" }}>
+        <form onSubmit={submit} className="form-stack">
+          <Field
+            label="Product Name"
+            value={form.name}
+            onChange={(v) => update("name", v)}
+            placeholder="Masukkan nama produk"
+            required
+          />
+
+          <label className="field">
+            <span>Description</span>
+            <textarea
+              value={form.description}
+              onChange={(e) => update("description", e.target.value)}
+              placeholder="Deskripsi produk"
+              rows={4}
+            />
+          </label>
+
+          <Field
+            label="Price"
+            type="number"
+            value={form.price}
+            onChange={(v) => update("price", v)}
+            placeholder="Contoh: 150000"
+            required
+          />
+
+          <Field
+            label="Stock"
+            type="number"
+            value={form.stock}
+            onChange={(v) => update("stock", v)}
+            placeholder="Jumlah stock"
+            required
+          />
+
+          <label className="field">
+            <span>Category</span>
+            <select
+              value={form.category_id}
+              onChange={(e) => update("category_id", e.target.value)}
+              required
+            >
+              <option value="">Pilih kategori</option>
+              {categories.map((category) => (
+                <option
+                  key={category.id ?? category.category_id}
+                  value={category.id ?? category.category_id}
+                >
+                  {category.name ?? category.category_name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {error && <p className="alert error">{error}</p>}
+
+          <div className="product-actions">
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => navigate("/products")}
+            >
+              Cancel
+            </button>
+
+            <button type="submit" className="button primary" disabled={busy}>
+              {busy ? "Saving..." : "Save Product"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </>
+  );
+}
+
 function Categories({ user }) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const isAdmin = user?.role === "admin";
+  const navigate = useNavigate();
   const load = () =>
     api
       .get("/api/categories")
@@ -720,7 +876,7 @@ function Categories({ user }) {
         description="Kelompokkan produk berdasarkan kategori."
         action={
           isAdmin && (
-            <button className="button primary" onClick={create}>
+            <button className="button primary" onClick={() => navigate("/categories/new")}>
               + Add category
             </button>
           )
@@ -757,6 +913,85 @@ function Categories({ user }) {
           desc="Tambahkan kategori atau jalankan seed.sql di database."
         />
       )}
+    </>
+  );
+}
+
+function CategoryForm() {
+  const navigate = useNavigate();
+
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+  });
+
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function update(key, value) {
+    setForm((old) => ({ ...old, [key]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    setBusy(true);
+
+    try {
+      await api.post("/api/categories", form);
+      navigate("/categories");
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="CATEGORY MANAGEMENT"
+        title="Add New Category"
+        description="Buat kategori baru untuk mengelompokkan produk."
+      />
+
+      <section className="panel" style={{ maxWidth: "760px" }}>
+        <form onSubmit={submit} className="form-stack">
+          <Field
+            label="Category Name"
+            value={form.name}
+            onChange={(v) => update("name", v)}
+            placeholder="Masukkan nama kategori"
+            required
+          />
+
+          <label className="field">
+            <span>Description</span>
+            <textarea
+              value={form.description}
+              onChange={(e) => update("description", e.target.value)}
+              placeholder="Deskripsi kategori"
+              rows={4}
+            />
+          </label>
+
+          {error && <p className="alert error">{error}</p>}
+
+          <div className="product-actions">
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => navigate("/categories")}
+            >
+              Cancel
+            </button>
+
+            <button type="submit" className="button primary" disabled={busy}>
+              {busy ? "Saving..." : "Save Category"}
+            </button>
+          </div>
+        </form>
+      </section>
     </>
   );
 }
